@@ -59,9 +59,21 @@ export default function CheckoutPage() {
         throw new Error(message);
       }
 
-      const order = data as Order;
-      clear();
-      router.push(`/success?orderId=${order.id}`);
+      // 🔥 STRIPE REDIRECT LOGIC:
+      // Agar NestJS backend Stripe Checkout Session URL return karta hai
+      if (data && data.url) {
+        window.location.href = data.url; // User ko Stripe ke secure payment page par bhejen
+        return; 
+      }
+
+      // Fallback: Agar backend direct order object return kare bina Stripe ke (purana flow)
+      if (data && data.id) {
+        clear();
+        router.push(`/success?orderId=${data.id}`);
+      } else {
+        throw new Error("Invalid response from checkout server.");
+      }
+
     } catch (err) {
       setError(err instanceof Error ? err.message : "Something went wrong.");
       setSubmitting(false);
