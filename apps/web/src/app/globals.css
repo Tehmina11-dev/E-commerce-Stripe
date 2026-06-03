@@ -1,0 +1,53 @@
+@import "tailwindcss";
+
+/* ---- Premium brand theme tokens (Tailwind v4) ---- */
+@theme {
+  --color-night: #0b0f14;
+  --color-night-700: #141b24;
+  --color-night-600: #1d2733;
+  --color-ink: #0f1111;
+  --color-mist: #f4f4f5;
+
+  --color-gold: #ffb02e;
+  --color-gold-600: #f59e0b;
+  --color-gold-700: #d97706;
+
+  --color-teal: #0f766e;
+
+  --shadow-card: 0 1px 2px rgb(15 17 17 / 0.06), 0 8px 24px rgb(15 17 17 / 0.06);
+  --shadow-lift: 0 12px 40px rgb(15 17 17 / 0.14);
+
+  --font-sans: var(--font-inter), ui-sans-serif, system-ui, sans-serif;
+}
+
+html {
+  scroll-behavior: smooth;
+}
+
+body {
+  background: #f6f7f8;
+  color: var(--color-ink);
+  -webkit-font-smoothing: antialiased;
+  text-rendering: optimizeLegibility;
+}
+
+/* Thin, refined scrollbar for the premium feel */
+* {
+  scrollbar-width: thin;
+  scrollbar-color: #cbd5e1 transparent;
+}
+
+@keyframes fade-up {
+  from {
+    opacity: 0;
+    transform: translateY(8px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.animate-fade-up {
+  animation: fade-up 0.5s cubic-bezier(0.22, 1, 0.36, 1) both;
+}

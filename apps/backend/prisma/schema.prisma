@@ -1,0 +1,66 @@
+// Prisma schema for the ecommerce backend
+// Docs: https://pris.ly/d/prisma-schema
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model Product {
+  id          String      @id @default(cuid())
+  name        String
+  description String?
+  // Price stored in the smallest currency unit (e.g. cents)
+  price       Int
+  currency    String      @default("usd")
+  stock       Int         @default(0)
+  imageUrl    String?
+  active      Boolean     @default(true)
+  createdAt   DateTime    @default(now())
+  updatedAt   DateTime    @updatedAt
+
+  orderItems  OrderItem[]
+}
+
+model Order {
+  id              String      @id @default(cuid())
+  // Total amount in the smallest currency unit (e.g. cents)
+  totalAmount     Int
+  currency        String      @default("usd")
+  status          OrderStatus @default(PENDING)
+  customerEmail   String?
+  // Stripe references
+  stripeSessionId      String? @unique
+  stripePaymentIntent  String? @unique
+  createdAt       DateTime    @default(now())
+  updatedAt       DateTime    @updatedAt
+
+  items           OrderItem[]
+}
+
+model OrderItem {
+  id         String   @id @default(cuid())
+  orderId    String
+  productId  String
+  quantity   Int
+  // Unit price captured at time of purchase (smallest currency unit)
+  unitPrice  Int
+
+  order      Order    @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  product    Product  @relation(fields: [productId], references: [id])
+
+  @@index([orderId])
+  @@index([productId])
+}
+
+enum OrderStatus {
+  PENDING
+  PAID
+  FAILED
+  CANCELLED
+  FULFILLED
+}

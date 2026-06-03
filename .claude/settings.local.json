@@ -1,0 +1,14 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(npx nest *)",
+      "PowerShell($conns = Get-NetTCPConnection -LocalPort 3000 -State Listen -ErrorAction SilentlyContinue; if \\($conns\\) { $conns | ForEach-Object { $p = Get-Process -Id $_.OwningProcess -ErrorAction SilentlyContinue; if \\($p\\) { \"Killing PID $\\($p.Id\\) \\($\\($p.ProcessName\\)\\)\"; Stop-Process -Id $p.Id -Force } } } else { \"Nothing listening on port 3000\" })",
+      "Bash(npm install *)",
+      "Bash(cat tsconfig.json)",
+      "Bash(cat tsconfig.build.json)",
+      "Bash(cat nest-cli.json)",
+      "Bash(find dist *)",
+      "Bash(npm run *)"
+    ]
+  }
+}

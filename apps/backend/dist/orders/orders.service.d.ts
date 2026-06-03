@@ -1,0 +1,63 @@
+import { PrismaService } from '../prisma/prisma.service';
+import { CheckoutDto } from './dto/checkout.dto';
+export declare class OrdersService {
+    private readonly prisma;
+    constructor(prisma: PrismaService);
+    checkout(dto: CheckoutDto): Promise<{
+        items: {
+            id: string;
+            quantity: number;
+            unitPrice: number;
+            productId: string;
+            orderId: string;
+        }[];
+    } & {
+        id: string;
+        currency: string;
+        createdAt: Date;
+        updatedAt: Date;
+        totalAmount: number;
+        status: import(".prisma/client").$Enums.OrderStatus;
+        customerEmail: string | null;
+        stripeSessionId: string | null;
+        stripePaymentIntent: string | null;
+    }>;
+    findAll(): Promise<({
+        items: {
+            id: string;
+            quantity: number;
+            unitPrice: number;
+            productId: string;
+            orderId: string;
+        }[];
+    } & {
+        id: string;
+        currency: string;
+        createdAt: Date;
+        updatedAt: Date;
+        totalAmount: number;
+        status: import(".prisma/client").$Enums.OrderStatus;
+        customerEmail: string | null;
+        stripeSessionId: string | null;
+        stripePaymentIntent: string | null;
+    })[]>;
+    findOne(id: string): Promise<{
+        items: {
+            id: string;
+            quantity: number;
+            unitPrice: number;
+            productId: string;
+            orderId: string;
+        }[];
+    } & {
+        id: string;
+        currency: string;
+        createdAt: Date;
+        updatedAt: Date;
+        totalAmount: number;
+        status: import(".prisma/client").$Enums.OrderStatus;
+        customerEmail: string | null;
+        stripeSessionId: string | null;
+        stripePaymentIntent: string | null;
+    }>;
+}
