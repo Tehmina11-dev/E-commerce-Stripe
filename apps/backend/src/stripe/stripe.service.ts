@@ -60,7 +60,7 @@ export class StripeService {
         });
       }
 
-      const frontendUrl = this.configService.get<string>('FRONTEND_URL') || 'http://localhost:3000';
+      const frontendUrl = this.configService.get<string>('FRONTEND_URL') || 'http://localhost:3001';
 
       // Temporary Stripe Checkout Session generate karna bina Order ID ke
       const session = await this.stripe.checkout.sessions.create({

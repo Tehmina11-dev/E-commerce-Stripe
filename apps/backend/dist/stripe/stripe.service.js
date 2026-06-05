@@ -59,7 +59,7 @@ let StripeService = class StripeService {
                     quantity: item.quantity,
                 });
             }
-            const frontendUrl = this.configService.get('FRONTEND_URL') || 'http://localhost:3000';
+            const frontendUrl = this.configService.get('FRONTEND_URL') || 'http://localhost:3001';
             const session = await this.stripe.checkout.sessions.create({
                 payment_method_types: ['card'],
                 line_items: lineItems,
