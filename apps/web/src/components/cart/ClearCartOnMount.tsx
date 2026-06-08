@@ -9,10 +9,10 @@ export function ClearCartOnMount() {
 
   useEffect(() => {
     if (!hasCleared.current) {
-      // 1. Context ki state ko 0/empty karein
+      // 1. Empty\0 the context state
       clear();
       
-      // 2. LocalStorage se aapki exact key ko force remove karein
+      // 2. Force remove exact key from local storage
       localStorage.removeItem("premium-cart:v1");
       
       hasCleared.current = true;

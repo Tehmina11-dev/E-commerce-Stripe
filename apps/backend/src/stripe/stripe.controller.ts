@@ -1,6 +1,8 @@
+// 📁 apps/backend/src/stripe/stripe.controller.ts
 import { 
   Controller, 
   Post, 
+  Get, // 👈 Make sure Get is imported here
   Body, 
   HttpCode, 
   HttpStatus, 
@@ -10,13 +12,59 @@ import {
   RawBodyRequest 
 } from '@nestjs/common';
 import { StripeService } from './stripe.service';
+import { PrismaService } from '../prisma/prisma.service'; // 👈 Import PrismaService
 import { Request } from 'express';
 
 @Controller('stripe')
 export class StripeController {
-  constructor(private readonly stripeService: StripeService) {}
+  // 👈 Inject both StripeService and PrismaService in constructor
+  constructor(
+    private readonly stripeService: StripeService,
+    private readonly prismaService: PrismaService, 
+  ) {}
 
-  // 1. Checkout Session generate karne ka endpoint (Existing)
+  // =========================================================================
+  // TEMPORARY: Create a Test Worker to generate a valid workerId
+  // =========================================================================
+  @Get('create-test-worker')
+  @HttpCode(HttpStatus.OK)
+  async createTestWorker() {
+    try {
+      const uniqueEmail = `worker_${Date.now()}@gmail.com`;
+      
+      const worker = await this.prismaService.worker.create({
+        data: {
+          name: 'Stripe Connect Test Worker',
+          email: uniqueEmail,
+          stripeConnectId: null,
+        },
+      });
+
+      return {
+        message: 'Test worker created successfully!',
+        workerId: worker.id,
+        email: worker.email,
+      };
+    } catch (error: any) {
+      throw new BadRequestException(`Failed to create test worker: ${error.message}`);
+    }
+  }
+
+  // =========================================================================
+  // 1. STRIPE CONNECT: Worker Onboarding Endpoint
+  // =========================================================================
+  @Post('connect/onboard')
+  @HttpCode(HttpStatus.OK)
+  async onboardWorker(@Body('workerId') workerId: string) {
+    if (!workerId) {
+      throw new BadRequestException('workerId is required to start onboarding');
+    }
+    return this.stripeService.generateOnboardingLink(workerId);
+  }
+
+  // =========================================================================
+  // 2. SIMPLE CHECKOUT: Endpoint to Generate Checkout Session
+  // =========================================================================
   @Post('checkout')
   @HttpCode(HttpStatus.OK)
   async checkout(@Body('items') items: { productId: string; quantity: number }[]) {
@@ -26,18 +74,18 @@ export class StripeController {
     return this.stripeService.createCheckoutSession(items);
   }
 
-  // 2. Stripe Webhook ko listen karne ka endpoint (New)
+  // =========================================================================
+  // 3. WEBHOOK: Endpoint to Listen and Verify Stripe Webhook Events
+  // =========================================================================
   @Post('webhook')
-  @HttpCode(HttpStatus.OK) // Stripe ko 200 OK response dena zaroori hota hai
+  @HttpCode(HttpStatus.OK)
   async handleWebhook(
-    @Req() req: RawBodyRequest<Request>, // Raw body ko preserve karne ke liye
-    @Headers('stripe-signature') signature: string, // Stripe ka secure signature
+    @Req() req: RawBodyRequest<Request>, 
+    @Headers('stripe-signature') signature: string, 
   ) {
     if (!signature) {
       throw new BadRequestException('Missing stripe-signature header');
     }
-
-    // `req.rawBody` direct pass hoga service ko signature verify karne ke liye
     return this.stripeService.handleWebhookEvent(req.rawBody, signature);
   }
 }

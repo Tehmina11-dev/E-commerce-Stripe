@@ -15,9 +15,37 @@ Object.defineProperty(exports, "__esModule", { value: true });
 exports.StripeController = void 0;
 const common_1 = require("@nestjs/common");
 const stripe_service_1 = require("./stripe.service");
+const prisma_service_1 = require("../prisma/prisma.service");
 let StripeController = class StripeController {
-    constructor(stripeService) {
+    constructor(stripeService, prismaService) {
         this.stripeService = stripeService;
+        this.prismaService = prismaService;
+    }
+    async createTestWorker() {
+        try {
+            const uniqueEmail = `worker_${Date.now()}@gmail.com`;
+            const worker = await this.prismaService.worker.create({
+                data: {
+                    name: 'Stripe Connect Test Worker',
+                    email: uniqueEmail,
+                    stripeConnectId: null,
+                },
+            });
+            return {
+                message: 'Test worker created successfully!',
+                workerId: worker.id,
+                email: worker.email,
+            };
+        }
+        catch (error) {
+            throw new common_1.BadRequestException(`Failed to create test worker: ${error.message}`);
+        }
+    }
+    async onboardWorker(workerId) {
+        if (!workerId) {
+            throw new common_1.BadRequestException('workerId is required to start onboarding');
+        }
+        return this.stripeService.generateOnboardingLink(workerId);
     }
     async checkout(items) {
         if (!items || items.length === 0) {
@@ -33,6 +61,21 @@ let StripeController = class StripeController {
     }
 };
 exports.StripeController = StripeController;
+__decorate([
+    (0, common_1.Get)('create-test-worker'),
+    (0, common_1.HttpCode)(common_1.HttpStatus.OK),
+    __metadata("design:type", Function),
+    __metadata("design:paramtypes", []),
+    __metadata("design:returntype", Promise)
+], StripeController.prototype, "createTestWorker", null);
+__decorate([
+    (0, common_1.Post)('connect/onboard'),
+    (0, common_1.HttpCode)(common_1.HttpStatus.OK),
+    __param(0, (0, common_1.Body)('workerId')),
+    __metadata("design:type", Function),
+    __metadata("design:paramtypes", [String]),
+    __metadata("design:returntype", Promise)
+], StripeController.prototype, "onboardWorker", null);
 __decorate([
     (0, common_1.Post)('checkout'),
     (0, common_1.HttpCode)(common_1.HttpStatus.OK),
@@ -52,6 +95,7 @@ __decorate([
 ], StripeController.prototype, "handleWebhook", null);
 exports.StripeController = StripeController = __decorate([
     (0, common_1.Controller)('stripe'),
-    __metadata("design:paramtypes", [stripe_service_1.StripeService])
+    __metadata("design:paramtypes", [stripe_service_1.StripeService,
+        prisma_service_1.PrismaService])
 ], StripeController);
 //# sourceMappingURL=stripe.controller.js.map

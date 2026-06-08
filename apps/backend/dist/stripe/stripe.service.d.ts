@@ -5,6 +5,9 @@ export declare class StripeService {
     private prisma;
     private stripe;
     constructor(configService: ConfigService, prisma: PrismaService);
+    generateOnboardingLink(workerId: string): Promise<{
+        url: string;
+    }>;
     createCheckoutSession(items: {
         productId: string;
         quantity: number;

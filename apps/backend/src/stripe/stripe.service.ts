@@ -1,3 +1,4 @@
+// 📁 apps/backend/src/stripe/stripe.service.ts
 import { Injectable, BadRequestException } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { PrismaService } from '../prisma/prisma.service';
@@ -16,20 +17,77 @@ export class StripeService {
       throw new Error('STRIPE_SECRET_KEY is missing in .env file');
     }
     
-    // API version ko undefined kiya taake version mismatch ka crash na aaye
+    // Set API version to undefined to prevent version mismatch crashes
     this.stripe = new Stripe(secretKey, {
       apiVersion: undefined as any,
     });
   }
 
-  // 1. Checkout Session Create Karna + Database mein PENDING Order dalna
+  // =========================================================================
+  // 1. STRIPE CONNECT: Generate Worker Onboarding Link
+  // =========================================================================
+  async generateOnboardingLink(workerId: string) {
+    try {
+      // Check if the worker exists in the database
+      const worker = await this.prisma.worker.findUnique({
+        where: { id: workerId },
+      });
+
+      if (!worker) {
+        throw new BadRequestException(`Worker with ID ${workerId} not found!`);
+      }
+
+      let stripeConnectId = worker.stripeConnectId;
+
+      // If the worker does not have a Stripe Connect ID, create a new Express account
+      if (!stripeConnectId) {
+        const account = await this.stripe.accounts.create({
+          type: 'express',
+          email: worker.email,
+          capabilities: {
+            card_payments: { requested: true },
+            transfers: { requested: true },
+          },
+        });
+
+        stripeConnectId = account.id;
+
+        // Save the Stripe Connect Account ID to the database
+        await this.prisma.worker.update({
+          where: { id: workerId },
+          data: { stripeConnectId: stripeConnectId },
+        });
+      }
+
+      const frontendUrl = this.configService.get<string>('FRONTEND_URL') || 'http://localhost:3001';
+
+      // Create an onboarding link where the worker will enter their bank details
+      const accountLink = await this.stripe.accountLinks.create({
+        account: stripeConnectId,
+        refresh_url: `${frontendUrl}/stripe-connect/refresh`, // Redirection URL if the link expires
+        return_url: `${frontendUrl}/stripe-connect/success`,  // Redirection URL when onboarding is complete
+        type: 'account_onboarding',
+      });
+
+      return { url: accountLink.url };
+    } catch (error: any) {
+      if (error instanceof BadRequestException) {
+        throw error;
+      }
+      throw new BadRequestException(error.message || 'Something went wrong inside Connect onboarding.');
+    }
+  }
+
+  // =========================================================================
+  // 2. SIMPLE CHECKOUT: Create Checkout Session + Save PENDING Order
+  // =========================================================================
   async createCheckoutSession(items: { productId: string; quantity: number }[]) {
     try {
       const lineItems: Stripe.Checkout.SessionCreateParams.LineItem[] = [];
       let totalAmount = 0;
       const verifiedItems: { product: any; quantity: number }[] = [];
 
-      // Products verify karna aur total amount calculate karna
+      // Verify products and calculate total amount
       for (const item of items) {
         const product = await this.prisma.product.findUnique({
           where: { id: item.productId },
@@ -62,7 +120,7 @@ export class StripeService {
 
       const frontendUrl = this.configService.get<string>('FRONTEND_URL') || 'http://localhost:3001';
 
-      // Temporary Stripe Checkout Session generate karna bina Order ID ke
+      // Generate temporary Stripe Checkout Session without Order ID
       const session = await this.stripe.checkout.sessions.create({
         payment_method_types: ['card'],
         line_items: lineItems,
@@ -74,13 +132,13 @@ export class StripeService {
         },
       });
 
-      // Database mein Order aur OrderItems ko PENDING status ke sath save karna
+      // Save Order and OrderItems to the database with PENDING status
       await this.prisma.order.create({
         data: {
           totalAmount: totalAmount,
           currency: verifiedItems[0]?.product.currency || 'usd',
           status: 'PENDING',
-          stripeSessionId: session.id, // Is session ID se hum baad mein webhook mein order track karenge
+          stripeSessionId: session.id, // Used later to track order in webhook
           items: {
             create: verifiedItems.map(item => ({
               productId: item.product.id,
@@ -94,7 +152,6 @@ export class StripeService {
       return { url: session.url };
 
     } catch (error: any) {
-      // Agar error pehle se BadRequestException hai toh wahi bhejenge, warna generic wrapper bhejenge
       if (error instanceof BadRequestException) {
         throw error;
       }
@@ -102,7 +159,9 @@ export class StripeService {
     }
   }
 
-  // 2. Webhook Se Payment Confirm Karke Order PAID Karna Aur Stock Kam Karna
+  // =========================================================================
+  // 3. WEBHOOK: Confirm Payment, Update Order Status to PAID, and Reduce Stock
+  // =========================================================================
   async handleWebhookEvent(rawBody: Buffer | undefined, signature: string) {
     if (!rawBody) {
       throw new BadRequestException('Empty raw body received');
@@ -121,11 +180,11 @@ export class StripeService {
       throw new BadRequestException(`Webhook Signature Verification Failed: ${err.message}`);
     }
 
-    // Payment kamyaab hone par database transitions chalana
+    // Process database changes upon successful payment confirmation
     if (event.type === 'checkout.session.completed') {
       const session = event.data.object as Stripe.Checkout.Session;
 
-      // Session ID ke zariye database se Order aur uske items dhoondna
+      // Find the Order and its items using the Stripe Session ID
       const order = await this.prisma.order.findUnique({
         where: { stripeSessionId: session.id },
         include: { items: true },
@@ -136,12 +195,12 @@ export class StripeService {
         return { received: true };
       }
 
-      // Agar order pehle se PAID nahi hai toh hi updates chalayenge (Idempotency safety)
+      // Perform state transitions only if the order status is not already PAID (Idempotency safety)
       if (order.status !== 'PAID') {
-        // Prisma $transaction use kar rahe hain taake agar ek bhi operation fail ho toh poora transaction roll back ho jaye
+        // Wrap database operations inside a Prisma $transaction for safety
         await this.prisma.$transaction(async (tx) => {
           
-          // A. Order Status ko PAID mark karna aur references add karna
+          // A. Mark Order status as PAID and attach reference tokens
           await tx.order.update({
             where: { id: order.id },
             data: {
@@ -151,7 +210,7 @@ export class StripeService {
             },
           });
 
-          // B. Har item ka loop chala kar stock reduce karna
+          // B. Iterate through each item and decrement product stock
           for (const item of order.items) {
             await tx.product.update({
               where: { id: item.productId },

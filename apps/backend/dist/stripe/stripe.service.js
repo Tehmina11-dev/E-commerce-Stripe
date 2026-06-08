@@ -29,6 +29,46 @@ let StripeService = class StripeService {
             apiVersion: undefined,
         });
     }
+    async generateOnboardingLink(workerId) {
+        try {
+            const worker = await this.prisma.worker.findUnique({
+                where: { id: workerId },
+            });
+            if (!worker) {
+                throw new common_1.BadRequestException(`Worker with ID ${workerId} not found!`);
+            }
+            let stripeConnectId = worker.stripeConnectId;
+            if (!stripeConnectId) {
+                const account = await this.stripe.accounts.create({
+                    type: 'express',
+                    email: worker.email,
+                    capabilities: {
+                        card_payments: { requested: true },
+                        transfers: { requested: true },
+                    },
+                });
+                stripeConnectId = account.id;
+                await this.prisma.worker.update({
+                    where: { id: workerId },
+                    data: { stripeConnectId: stripeConnectId },
+                });
+            }
+            const frontendUrl = this.configService.get('FRONTEND_URL') || 'http://localhost:3001';
+            const accountLink = await this.stripe.accountLinks.create({
+                account: stripeConnectId,
+                refresh_url: `${frontendUrl}/stripe-connect/refresh`,
+                return_url: `${frontendUrl}/stripe-connect/success`,
+                type: 'account_onboarding',
+            });
+            return { url: accountLink.url };
+        }
+        catch (error) {
+            if (error instanceof common_1.BadRequestException) {
+                throw error;
+            }
+            throw new common_1.BadRequestException(error.message || 'Something went wrong inside Connect onboarding.');
+        }
+    }
     async createCheckoutSession(items) {
         try {
             const lineItems = [];

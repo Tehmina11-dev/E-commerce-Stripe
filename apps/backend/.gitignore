@@ -1,1 +1,40 @@
-node_modules
+
+# Dependency directories (Sabse zaroori taake heavy folders push na hon)
+node_modules/
+jspm_packages/
+web_modules/
+
+# Local environment files (CRITICAL: Taake aapki Stripe keys leak na hon)
+.env
+.env.local
+.env.development.local
+.env.test.local
+.env.production.local
+*.env
+
+# TypeScript compilation logs aur build outputs
+dist/
+build/
+.next/
+out/
+tsbuildinfo/
+
+# Logs
+logs
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# IDEs aur editors ke personal tracking folders
+.idea/
+.vscode/
+*.suo
+*.ntvs*
+*.njsproj
+*.sln
+*.swp
+
+# OS Files (Mac aur Windows ke fuzool files)
+.DS_Store
+Thumbs.db

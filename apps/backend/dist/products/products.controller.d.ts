@@ -15,6 +15,7 @@ export declare class ProductsController {
         active: boolean;
         createdAt: Date;
         updatedAt: Date;
+        workerId: string | null;
     }, never, import("@prisma/client/runtime/library").DefaultArgs>;
     findAll(): import(".prisma/client").Prisma.PrismaPromise<{
         id: string;
@@ -27,6 +28,7 @@ export declare class ProductsController {
         active: boolean;
         createdAt: Date;
         updatedAt: Date;
+        workerId: string | null;
     }[]>;
     findOne(id: string): Promise<{
         id: string;
@@ -39,6 +41,7 @@ export declare class ProductsController {
         active: boolean;
         createdAt: Date;
         updatedAt: Date;
+        workerId: string | null;
     }>;
     update(id: string, dto: UpdateProductDto): Promise<{
         id: string;
@@ -51,6 +54,7 @@ export declare class ProductsController {
         active: boolean;
         createdAt: Date;
         updatedAt: Date;
+        workerId: string | null;
     }>;
     remove(id: string): Promise<{
         id: string;
@@ -63,5 +67,6 @@ export declare class ProductsController {
         active: boolean;
         createdAt: Date;
         updatedAt: Date;
+        workerId: string | null;
     }>;
 }

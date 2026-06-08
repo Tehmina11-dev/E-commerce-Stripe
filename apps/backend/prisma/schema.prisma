@@ -10,6 +10,18 @@ datasource db {
   url      = env("DATABASE_URL")
 }
 
+model Worker {
+  id              String    @id @default(uuid())
+  name            String
+  email           String    @unique
+  
+  // Stripe Connect Account ID (e.g., acct_xxxx)
+  stripeConnectId String?   @unique 
+
+  // Worker ke products ka relation
+  products        Product[]
+}
+
 model Product {
   id          String      @id @default(cuid())
   name        String
@@ -23,23 +35,27 @@ model Product {
   createdAt   DateTime    @default(now())
   updatedAt   DateTime    @updatedAt
 
+  // Stripe Connect ke liye Product ko Worker se link kiya
+  workerId    String?
+  worker      Worker?     @relation(fields: [workerId], references: [id])
+
   orderItems  OrderItem[]
 }
 
 model Order {
-  id              String      @id @default(cuid())
+  id                  String      @id @default(cuid())
   // Total amount in the smallest currency unit (e.g. cents)
-  totalAmount     Int
-  currency        String      @default("usd")
-  status          OrderStatus @default(PENDING)
-  customerEmail   String?
+  totalAmount         Int
+  currency            String      @default("usd")
+  status              OrderStatus @default(PENDING)
+  customerEmail       String?
   // Stripe references
-  stripeSessionId      String? @unique
-  stripePaymentIntent  String? @unique
-  createdAt       DateTime    @default(now())
-  updatedAt       DateTime    @updatedAt
+  stripeSessionId     String?     @unique
+  stripePaymentIntent String?     @unique
+  createdAt           DateTime    @default(now())
+  updatedAt           DateTime    @updatedAt
 
-  items           OrderItem[]
+  items               OrderItem[]
 }
 
 model OrderItem {
