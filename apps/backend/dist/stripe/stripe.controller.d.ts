@@ -14,11 +14,41 @@ export declare class StripeController {
     onboardWorker(workerId: string): Promise<{
         url: string;
     }>;
-    checkout(items: {
+    verifyWorkerOnboarding(workerId: string): Promise<{
+        success: boolean;
+        message: string;
+        isOnboardingDone: boolean;
+    }>;
+    checkout(workerId: string, items: {
         productId: string;
         quantity: number;
     }[]): Promise<{
         url: string | null;
+    }>;
+    getSession(sessionId: string): Promise<{
+        workerId: string;
+        cartItems: any;
+    }>;
+    subscriptionCheckout(workerId: string, priceId?: string): Promise<{
+        url: string | null;
+    }>;
+    subscriptionPortal(workerId: string): Promise<{
+        url: string;
+    }>;
+    subscriptionStatus(workerId: string): Promise<{
+        isSubscribed: boolean;
+        subscription: {
+            id: string;
+            stripeCustomerId: string;
+            createdAt: Date;
+            updatedAt: Date;
+            workerId: string;
+            status: import(".prisma/client").$Enums.SubscriptionStatus;
+            stripeSubscriptionId: string;
+            stripePriceId: string | null;
+            currentPeriodEnd: Date | null;
+            cancelAtPeriodEnd: boolean;
+        } | null;
     }>;
     handleWebhook(req: RawBodyRequest<Request>, signature: string): Promise<{
         received: boolean;

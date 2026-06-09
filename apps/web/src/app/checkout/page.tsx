@@ -38,10 +38,26 @@ export default function CheckoutPage() {
     setError(null);
 
     try {
+      // The backend creates a single Connect destination charge per checkout,
+      // so it expects ONE top-level workerId (the seller to pay out). This cart
+      // assumes a single seller — guard against a mixed-seller cart.
+      const workerId = lines[0]?.workerId;
+      const singleSeller = lines.every((l) => l.workerId === workerId);
+
+      if (!workerId) {
+        throw new Error("Cart items are missing seller information.");
+      }
+      if (!singleSeller) {
+        throw new Error(
+          "Your cart contains items from multiple sellers. Please check out one seller at a time."
+        );
+      }
+
       const res = await fetch("/api/checkout", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
+          workerId, // top-level — matches backend @Body('workerId')
           items: lines.map((l) => ({
             productId: l.productId,
             quantity: l.quantity,

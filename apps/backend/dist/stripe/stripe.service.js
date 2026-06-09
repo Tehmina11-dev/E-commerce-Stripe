@@ -26,7 +26,7 @@ let StripeService = class StripeService {
             throw new Error('STRIPE_SECRET_KEY is missing in .env file');
         }
         this.stripe = new stripe_1.default(secretKey, {
-            apiVersion: undefined,
+            apiVersion: '2024-04-10',
         });
     }
     async generateOnboardingLink(workerId) {
@@ -56,8 +56,8 @@ let StripeService = class StripeService {
             const frontendUrl = this.configService.get('FRONTEND_URL') || 'http://localhost:3001';
             const accountLink = await this.stripe.accountLinks.create({
                 account: stripeConnectId,
-                refresh_url: `${frontendUrl}/stripe-connect/refresh`,
-                return_url: `${frontendUrl}/stripe-connect/success`,
+                refresh_url: `${frontendUrl}/stripe-connect/refresh?workerId=${workerId}`,
+                return_url: `${frontendUrl}/stripe-connect/success?workerId=${workerId}`,
                 type: 'account_onboarding',
             });
             return { url: accountLink.url };
@@ -69,7 +69,39 @@ let StripeService = class StripeService {
             throw new common_1.BadRequestException(error.message || 'Something went wrong inside Connect onboarding.');
         }
     }
-    async createCheckoutSession(items) {
+    async verifyOnboardingStatus(workerId) {
+        try {
+            const worker = await this.prisma.worker.findUnique({
+                where: { id: workerId },
+            });
+            if (!worker || !worker.stripeConnectId) {
+                throw new common_1.NotFoundException('Worker or Stripe Connect Account not found');
+            }
+            const account = await this.stripe.accounts.retrieve(worker.stripeConnectId);
+            if (account.details_submitted || account.charges_enabled) {
+                await this.prisma.worker.update({
+                    where: { id: workerId },
+                    data: { isOnboardingDone: true },
+                });
+                return {
+                    success: true,
+                    message: 'Onboarding completed successfully!',
+                    isOnboardingDone: true
+                };
+            }
+            return {
+                success: false,
+                message: 'Onboarding is incomplete. Details still required inside Stripe Express dashboard.',
+                isOnboardingDone: false
+            };
+        }
+        catch (error) {
+            if (error instanceof common_1.NotFoundException)
+                throw error;
+            throw new common_1.BadRequestException(`Failed to verify Stripe status: ${error.message}`);
+        }
+    }
+    async createCheckoutSession(items, workerId) {
         try {
             const lineItems = [];
             let totalAmount = 0;
@@ -77,6 +109,7 @@ let StripeService = class StripeService {
             for (const item of items) {
                 const product = await this.prisma.product.findUnique({
                     where: { id: item.productId },
+                    include: { worker: true }
                 });
                 if (!product) {
                     throw new common_1.BadRequestException(`Product with ID ${item.productId} not found!`);
@@ -100,15 +133,29 @@ let StripeService = class StripeService {
                 });
             }
             const frontendUrl = this.configService.get('FRONTEND_URL') || 'http://localhost:3001';
+            const worker = await this.prisma.worker.findUnique({ where: { id: workerId } });
+            let paymentConfig = {};
+            if (worker?.stripeConnectId && worker?.isOnboardingDone) {
+                const platformFee = Math.round(totalAmount * 0.10);
+                paymentConfig = {
+                    payment_intent_data: {
+                        application_fee_amount: platformFee,
+                        transfer_data: {
+                            destination: worker.stripeConnectId,
+                        },
+                    },
+                };
+            }
             const session = await this.stripe.checkout.sessions.create({
-                payment_method_types: ['card'],
                 line_items: lineItems,
                 mode: 'payment',
                 success_url: `${frontendUrl}/success?session_id={CHECKOUT_SESSION_ID}`,
                 cancel_url: `${frontendUrl}/cancel`,
                 metadata: {
                     cartItems: JSON.stringify(items.map(i => ({ id: i.productId, qty: i.quantity }))),
+                    workerId: workerId,
                 },
+                ...paymentConfig,
             });
             await this.prisma.order.create({
                 data: {
@@ -128,62 +175,237 @@ let StripeService = class StripeService {
             return { url: session.url };
         }
         catch (error) {
-            if (error instanceof common_1.BadRequestException) {
+            if (error instanceof common_1.BadRequestException)
                 throw error;
-            }
             throw new common_1.BadRequestException(error.message || 'Something went wrong inside checkout session creation.');
         }
     }
+    async createSubscriptionCheckout(workerId, priceId) {
+        try {
+            const worker = await this.prisma.worker.findUnique({
+                where: { id: workerId },
+            });
+            if (!worker) {
+                throw new common_1.BadRequestException(`Worker with ID ${workerId} not found!`);
+            }
+            const resolvedPriceId = priceId || this.configService.get('STRIPE_PRICE_ID');
+            if (!resolvedPriceId) {
+                throw new common_1.BadRequestException('No subscription priceId provided and STRIPE_PRICE_ID is not configured.');
+            }
+            let customerId = worker.stripeCustomerId;
+            if (!customerId) {
+                const customer = await this.stripe.customers.create({
+                    email: worker.email,
+                    name: worker.name,
+                    metadata: { workerId },
+                });
+                customerId = customer.id;
+                await this.prisma.worker.update({
+                    where: { id: workerId },
+                    data: { stripeCustomerId: customerId },
+                });
+            }
+            const frontendUrl = this.configService.get('FRONTEND_URL') || 'http://localhost:3001';
+            const session = await this.stripe.checkout.sessions.create({
+                mode: 'subscription',
+                customer: customerId,
+                line_items: [{ price: resolvedPriceId, quantity: 1 }],
+                success_url: `${frontendUrl}/dashboard?subscription=success`,
+                cancel_url: `${frontendUrl}/dashboard?subscription=cancelled`,
+                metadata: { workerId },
+                subscription_data: { metadata: { workerId } },
+            });
+            return { url: session.url };
+        }
+        catch (error) {
+            if (error instanceof common_1.BadRequestException)
+                throw error;
+            throw new common_1.BadRequestException(error.message || 'Something went wrong inside subscription checkout.');
+        }
+    }
+    async createBillingPortalSession(workerId) {
+        try {
+            const worker = await this.prisma.worker.findUnique({
+                where: { id: workerId },
+            });
+            if (!worker?.stripeCustomerId) {
+                throw new common_1.NotFoundException('No Stripe customer found for this worker. Subscribe first.');
+            }
+            const frontendUrl = this.configService.get('FRONTEND_URL') || 'http://localhost:3001';
+            const session = await this.stripe.billingPortal.sessions.create({
+                customer: worker.stripeCustomerId,
+                return_url: `${frontendUrl}/dashboard`,
+            });
+            return { url: session.url };
+        }
+        catch (error) {
+            if (error instanceof common_1.NotFoundException)
+                throw error;
+            throw new common_1.BadRequestException(`Failed to open billing portal: ${error.message}`);
+        }
+    }
+    async getSubscriptionStatus(workerId) {
+        const subscription = await this.prisma.subscription.findUnique({
+            where: { workerId },
+        });
+        return {
+            isSubscribed: !!subscription &&
+                (subscription.status === 'ACTIVE' || subscription.status === 'TRIALING'),
+            subscription,
+        };
+    }
+    async getCheckoutSession(sessionId) {
+        try {
+            const session = await this.stripe.checkout.sessions.retrieve(sessionId);
+            return {
+                workerId: session.metadata?.workerId || '',
+                cartItems: session.metadata?.cartItems ? JSON.parse(session.metadata.cartItems) : [],
+            };
+        }
+        catch (error) {
+            throw new common_1.BadRequestException(`Failed to fetch Stripe session details: ${error.message}`);
+        }
+    }
     async handleWebhookEvent(rawBody, signature) {
-        if (!rawBody) {
+        if (!rawBody)
             throw new common_1.BadRequestException('Empty raw body received');
-        }
-        let event;
         const webhookSecret = this.configService.get('STRIPE_WEBHOOK_SECRET');
-        if (!webhookSecret) {
+        if (!webhookSecret)
             throw new Error('STRIPE_WEBHOOK_SECRET is missing in .env file');
-        }
+        let event;
         try {
             event = this.stripe.webhooks.constructEvent(rawBody, signature, webhookSecret);
         }
         catch (err) {
             throw new common_1.BadRequestException(`Webhook Signature Verification Failed: ${err.message}`);
         }
-        if (event.type === 'checkout.session.completed') {
-            const session = event.data.object;
-            const order = await this.prisma.order.findUnique({
-                where: { stripeSessionId: session.id },
-                include: { items: true },
-            });
-            if (!order) {
-                console.error(`Order not found for Stripe Session ID: ${session.id}`);
-                return { received: true };
+        switch (event.type) {
+            case 'checkout.session.completed': {
+                const session = event.data.object;
+                if (session.mode === 'payment') {
+                    await this.fulfillOrder(session);
+                }
+                break;
             }
-            if (order.status !== 'PAID') {
-                await this.prisma.$transaction(async (tx) => {
-                    await tx.order.update({
-                        where: { id: order.id },
-                        data: {
-                            status: 'PAID',
-                            customerEmail: session.customer_details?.email || null,
-                            stripePaymentIntent: session.payment_intent || null,
-                        },
-                    });
-                    for (const item of order.items) {
-                        await tx.product.update({
-                            where: { id: item.productId },
-                            data: {
-                                stock: {
-                                    decrement: item.quantity,
-                                },
-                            },
-                        });
-                    }
-                });
-                console.log(`--- ORDER SUCCESS --- Order ID: ${order.id} has been paid and stock updated!`);
+            case 'customer.subscription.created':
+            case 'customer.subscription.updated':
+            case 'customer.subscription.deleted': {
+                const subscription = event.data.object;
+                await this.syncSubscription(subscription);
+                break;
             }
+            case 'invoice.payment_failed': {
+                const invoice = event.data.object;
+                console.warn(`--- INVOICE FAILED --- customer ${invoice.customer}, invoice ${invoice.id}`);
+                break;
+            }
+            case 'invoice.paid': {
+                const invoice = event.data.object;
+                console.log(`--- INVOICE PAID --- customer ${invoice.customer}, invoice ${invoice.id}`);
+                break;
+            }
+            case 'account.updated': {
+                const account = event.data.object;
+                await this.syncConnectAccount(account);
+                break;
+            }
+            default:
+                break;
         }
         return { received: true };
+    }
+    async fulfillOrder(session) {
+        const order = await this.prisma.order.findUnique({
+            where: { stripeSessionId: session.id },
+            include: { items: true },
+        });
+        if (order && order.status !== 'PAID') {
+            await this.prisma.$transaction(async (tx) => {
+                await tx.order.update({
+                    where: { id: order.id },
+                    data: {
+                        status: 'PAID',
+                        customerEmail: session.customer_details?.email || null,
+                        stripePaymentIntent: session.payment_intent || null,
+                    },
+                });
+                for (const item of order.items) {
+                    await tx.product.update({
+                        where: { id: item.productId },
+                        data: { stock: { decrement: item.quantity } },
+                    });
+                }
+            });
+            console.log(`--- ORDER SUCCESS --- Order ID: ${order.id} paid & processed!`);
+        }
+    }
+    mapSubscriptionStatus(status) {
+        const map = {
+            trialing: 'TRIALING',
+            active: 'ACTIVE',
+            past_due: 'PAST_DUE',
+            canceled: 'CANCELED',
+            unpaid: 'UNPAID',
+            incomplete: 'INCOMPLETE',
+            incomplete_expired: 'INCOMPLETE_EXPIRED',
+            paused: 'PAST_DUE',
+        };
+        return (map[status] || 'INCOMPLETE');
+    }
+    async syncSubscription(subscription) {
+        let workerId = subscription.metadata?.workerId;
+        if (!workerId) {
+            const worker = await this.prisma.worker.findFirst({
+                where: { stripeCustomerId: subscription.customer },
+            });
+            workerId = worker?.id;
+        }
+        if (!workerId) {
+            console.warn(`--- SUBSCRIPTION SYNC SKIPPED --- could not resolve worker for ${subscription.id}`);
+            return;
+        }
+        const data = {
+            workerId,
+            stripeSubscriptionId: subscription.id,
+            stripeCustomerId: subscription.customer,
+            stripePriceId: subscription.items.data[0]?.price?.id || null,
+            status: this.mapSubscriptionStatus(subscription.status),
+            currentPeriodEnd: subscription.current_period_end
+                ? new Date(subscription.current_period_end * 1000)
+                : null,
+            cancelAtPeriodEnd: subscription.cancel_at_period_end,
+        };
+        try {
+            await this.prisma.subscription.upsert({
+                where: { workerId },
+                create: data,
+                update: data,
+            });
+        }
+        catch (err) {
+            if (err?.code === 'P2002') {
+                await this.prisma.subscription.update({ where: { workerId }, data });
+            }
+            else {
+                throw err;
+            }
+        }
+        console.log(`--- SUBSCRIPTION SYNCED --- worker ${workerId} is now ${data.status}`);
+    }
+    async syncConnectAccount(account) {
+        const worker = await this.prisma.worker.findFirst({
+            where: { stripeConnectId: account.id },
+        });
+        if (!worker)
+            return;
+        const isOnboardingDone = !!(account.details_submitted || account.charges_enabled);
+        if (worker.isOnboardingDone !== isOnboardingDone) {
+            await this.prisma.worker.update({
+                where: { id: worker.id },
+                data: { isOnboardingDone },
+            });
+            console.log(`--- CONNECT SYNCED --- worker ${worker.id} onboarding = ${isOnboardingDone}`);
+        }
     }
 };
 exports.StripeService = StripeService;

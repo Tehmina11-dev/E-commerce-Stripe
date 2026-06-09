@@ -75,6 +75,8 @@ export function CartProvider({ children }: { children: React.ReactNode }) {
           currency: product.currency,
           imageUrl: product.imageUrl,
           stock: product.stock,
+          // Capture the seller so checkout can attribute the Connect payout.
+          workerId: product.workerId ?? "",
           quantity: clampToStock(quantity, product.stock),
         },
       ];

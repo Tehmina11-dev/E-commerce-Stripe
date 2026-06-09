@@ -14,10 +14,23 @@
 
   --color-teal: #0f766e;
 
+  /* ---- Aliases used across the worker dashboard / Stripe Connect pages ---- */
+  --color-primary: #ffb02e; /* same as gold — brand action color */
+  --color-dark: #0f1111; /* same as ink */
+  --color-light: #ffffff;
+  --color-background: #f6f7f8; /* page background */
+  --color-gray: #9ca3af;
+  --color-accent: #0f766e; /* same as teal */
+
   --shadow-card: 0 1px 2px rgb(15 17 17 / 0.06), 0 8px 24px rgb(15 17 17 / 0.06);
   --shadow-lift: 0 12px 40px rgb(15 17 17 / 0.14);
 
+  /* Extra radii referenced by the Stripe Connect UI (rounded-xl2 / rounded-xl3) */
+  --radius-xl2: 0.875rem;
+  --radius-xl3: 1.25rem;
+
   --font-sans: var(--font-inter), ui-sans-serif, system-ui, sans-serif;
+  --font-heading: var(--font-inter), ui-sans-serif, system-ui, sans-serif;
 }
 
 html {

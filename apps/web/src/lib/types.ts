@@ -10,6 +10,8 @@ export interface Product {
   stock: number;
   imageUrl: string | null;
   active: boolean;
+  /** The seller this product belongs to — needed for Connect payouts at checkout. */
+  workerId: string | null;
   createdAt: string;
   updatedAt: string;
 }
@@ -49,4 +51,5 @@ export interface CartLine {
   imageUrl: string | null;
   stock: number;
   quantity: number;
+  workerId: string;
 }

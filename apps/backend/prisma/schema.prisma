@@ -11,15 +11,53 @@ datasource db {
 }
 
 model Worker {
-  id              String    @id @default(uuid())
-  name            String
-  email           String    @unique
+  id                String    @id @default(uuid())
+  name              String
+  email             String    @unique
   
   // Stripe Connect Account ID (e.g., acct_xxxx)
-  stripeConnectId String?   @unique 
+  stripeConnectId   String?   @unique
+
+  // Stripe Customer ID (cus_xxxx) — used for the platform subscription the worker pays
+  stripeCustomerId  String?   @unique
+
+  // --- YE FIELD ADD KAREIN ---
+  // Tracks if the worker completed the Stripe Express onboarding flow
+  isOnboardingDone  Boolean   @default(false)
 
   // Worker ke products ka relation
-  products        Product[]
+  products          Product[]
+
+  // The worker's platform subscription (e.g. "Pro Seller" plan)
+  subscription      Subscription?
+}
+
+model Subscription {
+  id                   String             @id @default(uuid())
+  workerId             String             @unique
+  worker               Worker             @relation(fields: [workerId], references: [id], onDelete: Cascade)
+
+  // Stripe references
+  stripeSubscriptionId String             @unique
+  stripeCustomerId     String
+  stripePriceId        String?
+
+  status               SubscriptionStatus @default(INCOMPLETE)
+  currentPeriodEnd     DateTime?
+  cancelAtPeriodEnd    Boolean            @default(false)
+
+  createdAt            DateTime           @default(now())
+  updatedAt            DateTime           @updatedAt
+}
+
+enum SubscriptionStatus {
+  TRIALING
+  ACTIVE
+  PAST_DUE
+  CANCELED
+  INCOMPLETE
+  INCOMPLETE_EXPIRED
+  UNPAID
 }
 
 model Product {

@@ -1,0 +1,9 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(echo \"=== TSC EXIT $? ===\")",
+      "Bash(curl -s -w \"\\\\n[HTTP %{http_code}]\\\\n\" http://localhost:3000/stripe/connect/verify/eeac6a76-7d9e-4f86-99a0-b907b20f65c4 --max-time 8)",
+      "Bash(curl -s -w \"\\\\n[HTTP %{http_code}]\\\\n\" http://localhost:3000/stripe/subscription/status/eeac6a76-7d9e-4f86-99a0-b907b20f65c4 --max-time 8)"
+    ]
+  }
+}

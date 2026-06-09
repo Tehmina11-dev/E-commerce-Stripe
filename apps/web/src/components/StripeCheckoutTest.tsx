@@ -2,10 +2,9 @@
 
 import { useState } from "react";
 
-// 👇👇👇 PUT YOUR REAL DATABASE PRODUCT ID HERE 👇👇👇
-// Get a valid id from your backend: GET http://localhost:3000/products
-const PLACEHOLDER_PRODUCT_ID = "PLACEHOLDER_PRODUCT_ID";
-// 👆👆👆 -------------------------------------- 👆👆👆
+// Real database credentials provided
+const VALID_PRODUCT_ID = "cmpwhqpk50000dcxuwr63cezw";
+const VALID_WORKER_ID = "66fbbe4c-ce42-417b-8751-aede192ec4a4"; 
 
 export function StripeCheckoutTest() {
   const [loading, setLoading] = useState(false);
@@ -14,36 +13,43 @@ export function StripeCheckoutTest() {
     setLoading(true);
 
     try {
-      const response = await fetch("http://localhost:3000/stripe/checkout", {
+      const response = await fetch("/api/checkout", {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: { 
+          "Content-Type": "application/json" 
+        },
         body: JSON.stringify({
           items: [
             {
-              productId: PLACEHOLDER_PRODUCT_ID,
+              productId: VALID_PRODUCT_ID,
               quantity: 1,
             },
           ],
+          // Matches the flat structure your NestJS @Body('workerId') expects
+          workerId: VALID_WORKER_ID,
         }),
       });
 
+      // Parse error payload cleanly if the response fails
       if (!response.ok) {
-        throw new Error(`Request failed with status ${response.status}`);
+        const errorData = await response.json().catch(() => ({}));
+        console.error("Backend Error Context:", errorData);
+        
+        const errorMessage = errorData?.message?.message || errorData?.message || "Unknown validation error";
+        throw new Error(`Request failed (${response.status}): ${errorMessage}`);
       }
 
       const data = await response.json();
 
       if (data?.url) {
-        // Redirect the browser to Stripe's hosted checkout page.
+        // Safe cross-origin redirect to Stripe checkout interface
         window.location.href = data.url;
       } else {
-        throw new Error("Response did not include a checkout `url`.");
+        throw new Error("Response did not include a valid Stripe checkout URL.");
       }
-    } catch (error) {
-      console.error("Stripe checkout failed:", error);
-      alert(
-        "Checkout failed. Is the backend running on :3000 and is /stripe/checkout implemented? See the console for details.",
-      );
+    } catch (error: any) {
+      console.error("Stripe checkout processing failed:", error);
+      alert(error.message || "Checkout failed. Please check the developer console.");
     } finally {
       setLoading(false);
     }
@@ -53,7 +59,7 @@ export function StripeCheckoutTest() {
     <button
       onClick={handleCheckout}
       disabled={loading}
-      className="rounded-md bg-indigo-600 px-6 py-3 font-semibold text-white transition hover:bg-indigo-700 disabled:cursor-not-allowed disabled:opacity-60"
+      className="bg-primary hover:bg-opacity-90 text-dark px-6 py-3 font-heading font-semibold rounded-xl2 transition duration-200 disabled:cursor-not-allowed disabled:opacity-60 shadow-card"
     >
       {loading ? "Processing..." : "Test Stripe Checkout"}
     </button>

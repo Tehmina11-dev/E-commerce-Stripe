@@ -29,6 +29,7 @@ let StripeController = class StripeController {
                     name: 'Stripe Connect Test Worker',
                     email: uniqueEmail,
                     stripeConnectId: null,
+                    isOnboardingDone: false,
                 },
             });
             return {
@@ -47,15 +48,51 @@ let StripeController = class StripeController {
         }
         return this.stripeService.generateOnboardingLink(workerId);
     }
-    async checkout(items) {
+    async verifyWorkerOnboarding(workerId) {
+        if (!workerId) {
+            throw new common_1.BadRequestException('workerId is required to verify status');
+        }
+        return this.stripeService.verifyOnboardingStatus(workerId);
+    }
+    async checkout(workerId, items) {
+        if (!workerId) {
+            throw new common_1.BadRequestException('workerId is required for metadata context');
+        }
         if (!items || items.length === 0) {
             throw new common_1.BadRequestException('Cart items cannot be empty');
         }
-        return this.stripeService.createCheckoutSession(items);
+        return this.stripeService.createCheckoutSession(items, workerId);
+    }
+    async getSession(sessionId) {
+        if (!sessionId) {
+            throw new common_1.BadRequestException('sessionId param is required');
+        }
+        return this.stripeService.getCheckoutSession(sessionId);
+    }
+    async subscriptionCheckout(workerId, priceId) {
+        if (!workerId) {
+            throw new common_1.BadRequestException('workerId is required to start a subscription');
+        }
+        return this.stripeService.createSubscriptionCheckout(workerId, priceId);
+    }
+    async subscriptionPortal(workerId) {
+        if (!workerId) {
+            throw new common_1.BadRequestException('workerId is required to open the billing portal');
+        }
+        return this.stripeService.createBillingPortalSession(workerId);
+    }
+    async subscriptionStatus(workerId) {
+        if (!workerId) {
+            throw new common_1.BadRequestException('workerId is required to read subscription status');
+        }
+        return this.stripeService.getSubscriptionStatus(workerId);
     }
     async handleWebhook(req, signature) {
         if (!signature) {
             throw new common_1.BadRequestException('Missing stripe-signature header');
+        }
+        if (!req.rawBody) {
+            throw new common_1.BadRequestException('Raw body is empty. Ensure NestFactory.create(..., { rawBody: true }) is configured.');
         }
         return this.stripeService.handleWebhookEvent(req.rawBody, signature);
     }
@@ -77,13 +114,55 @@ __decorate([
     __metadata("design:returntype", Promise)
 ], StripeController.prototype, "onboardWorker", null);
 __decorate([
+    (0, common_1.Get)('connect/verify/:workerId'),
+    (0, common_1.HttpCode)(common_1.HttpStatus.OK),
+    __param(0, (0, common_1.Param)('workerId')),
+    __metadata("design:type", Function),
+    __metadata("design:paramtypes", [String]),
+    __metadata("design:returntype", Promise)
+], StripeController.prototype, "verifyWorkerOnboarding", null);
+__decorate([
     (0, common_1.Post)('checkout'),
     (0, common_1.HttpCode)(common_1.HttpStatus.OK),
-    __param(0, (0, common_1.Body)('items')),
+    __param(0, (0, common_1.Body)('workerId')),
+    __param(1, (0, common_1.Body)('items')),
     __metadata("design:type", Function),
-    __metadata("design:paramtypes", [Array]),
+    __metadata("design:paramtypes", [String, Array]),
     __metadata("design:returntype", Promise)
 ], StripeController.prototype, "checkout", null);
+__decorate([
+    (0, common_1.Get)('checkout-session/:sessionId'),
+    (0, common_1.HttpCode)(common_1.HttpStatus.OK),
+    __param(0, (0, common_1.Param)('sessionId')),
+    __metadata("design:type", Function),
+    __metadata("design:paramtypes", [String]),
+    __metadata("design:returntype", Promise)
+], StripeController.prototype, "getSession", null);
+__decorate([
+    (0, common_1.Post)('subscription/checkout'),
+    (0, common_1.HttpCode)(common_1.HttpStatus.OK),
+    __param(0, (0, common_1.Body)('workerId')),
+    __param(1, (0, common_1.Body)('priceId')),
+    __metadata("design:type", Function),
+    __metadata("design:paramtypes", [String, String]),
+    __metadata("design:returntype", Promise)
+], StripeController.prototype, "subscriptionCheckout", null);
+__decorate([
+    (0, common_1.Post)('subscription/portal'),
+    (0, common_1.HttpCode)(common_1.HttpStatus.OK),
+    __param(0, (0, common_1.Body)('workerId')),
+    __metadata("design:type", Function),
+    __metadata("design:paramtypes", [String]),
+    __metadata("design:returntype", Promise)
+], StripeController.prototype, "subscriptionPortal", null);
+__decorate([
+    (0, common_1.Get)('subscription/status/:workerId'),
+    (0, common_1.HttpCode)(common_1.HttpStatus.OK),
+    __param(0, (0, common_1.Param)('workerId')),
+    __metadata("design:type", Function),
+    __metadata("design:paramtypes", [String]),
+    __metadata("design:returntype", Promise)
+], StripeController.prototype, "subscriptionStatus", null);
 __decorate([
     (0, common_1.Post)('webhook'),
     (0, common_1.HttpCode)(common_1.HttpStatus.OK),

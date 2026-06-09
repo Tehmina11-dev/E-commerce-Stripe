@@ -3,18 +3,29 @@ import { NestFactory } from '@nestjs/core';
 import { ValidationPipe } from '@nestjs/common';
 import { AppModule } from './app.module';
 import { AllExceptionsFilter } from './common/filters/http-exception.filter';
+import * as bodyParser from 'body-parser'; // 🎯 Explicit body-parser import
 
 async function bootstrap() {
-  // 1. Enable built-in rawBody to preserve the raw stream for Stripe webhook signatures
-  const app = await NestFactory.create(AppModule, {
-    rawBody: true, 
+  // 1. Create app with rawBody enabled for Webhook signature verification
+  const app = await NestFactory.create(AppModule, { 
+    rawBody: true,
   });
 
   // =========================================================================
-  // CORS Configuration: Allows frontend to communicate with backend safely
+  // Webhook Optimization: Explicitly ensuring rawBody handling
+  // =========================================================================
+  app.use(bodyParser.json({
+    limit: '10mb', // Stripe webhooks ke liye size limit set karna achha practice hai
+    verify: (req: any, res, buf) => {
+      req.rawBody = buf; // Ensure req.rawBody is available for Webhooks
+    },
+  }));
+
+  // =========================================================================
+  // CORS Configuration
   // =========================================================================
   app.enableCors({
-    origin: 'http://localhost:3001', // Your Frontend Next.js URL/Port
+    origin: 'http://localhost:3001', 
     methods: 'GET,HEAD,PUT,PATCH,POST,DELETE',
     credentials: true,
   });
